@@ -2,7 +2,7 @@ name: Actualiser les annonces
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # toutes les 30 min (GitHub peut retarder de quelques minutes)
+    - cron: "7,37 * * * *"   # toutes les 30 min, hors des minutes :00/:30 surchargées chez GitHub
   workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
 
 permissions:
