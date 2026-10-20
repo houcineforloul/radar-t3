@@ -4,5 +4,4 @@ __pycache__/
 # résultats générés (publiés par GitHub Actions, pas versionnés)
 annonces.csv
 annonces.html
-annonces_inli.csv
-annonces_inli.html
+
