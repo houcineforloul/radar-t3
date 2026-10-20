@@ -13,7 +13,7 @@ from sources.commun import AccesBloque
 
 DEPARTEMENTS = ["75", "92", "78"]
 PIECES = 3
-BUDGET_MAX = 1400
+BUDGET_MAX = 1300
 CSV = "annonces.csv"
 CARTE = "annonces.html"
 COLONNES = ["source", "id", "ville", "code_postal", "loyer", "charges_comprises", "loyer_hc",
