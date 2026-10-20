@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar T3</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Carte à gauche, fiches d'annonces à droite ; empilé sur téléphone. */
+:root {
+  --bg: #f2f5f4; --surface: #ffffff; --ink: #16211e; --muted: #5a6964; --line: #cdd6d2; --land: #e3e9e6;
+  --ok: #0d6b57; --ok-soft: #d7ece5; --over: #8f5a00; --over-soft: #f4e6cc; --focus: #1f5fd1;
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0f1514; --surface: #161e1c; --ink: #e2eae7; --muted: #94a39e; --line: #2c3935; --land: #1a2321;
+  --ok: #5cc9a8; --ok-soft: #173a31; --over: #e3a64a; --over-soft: #3b2c12; --focus: #7aa7ff; color-scheme: dark } }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 40px; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: end; justify-content: space-between; }
+h1 { font: 800 clamp(1.7rem, 4vw, 2.4rem)/1.05 var(--font-display); font-stretch: 112%; margin: 0; letter-spacing: -0.01em; }
+.sub { margin: 6px 0 0; color: var(--muted); }
+.budget { display: grid; gap: 4px; }
+.budget label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.budget-row { display: flex; align-items: center; gap: 12px; }
+.budget output { font: 800 1.4rem/1 var(--font-display); font-stretch: 112%; font-variant-numeric: tabular-nums; min-width: 6.5ch; }
+input[type=range] { accent-color: var(--ok); width: 220px; max-width: 50vw; }
+.summary { margin: 0; font-size: 1rem; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.map-box { position: sticky; top: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+@media (max-width: 860px) { .map-box { position: static; } }
+#map { height: clamp(380px, 72vh, 720px); background: var(--land); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Épingles de prix */
+.pin-icon { background: none; border: none; }
+.pin { position: absolute; left: 0; bottom: 0; transform: translate(-50%, -8px); white-space: nowrap; padding: 3px 8px; border-radius: 6px;
+  font: 700 12px/1.3 var(--font-body); font-variant-numeric: tabular-nums; color: #fff; border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; transition: transform .15s; }
+.pin::after { content: ""; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: inherit; }
+.pin.ok { background: var(--ok); } .pin.ok::after { border-top-color: var(--ok); }
+.pin.over { background: var(--over); } .pin.over::after { border-top-color: var(--over); }
+.pin.sel { transform: translate(-50%, -8px) scale(1.18); border-color: var(--ink); z-index: 1000; }
+.leaflet-container { font-family: var(--font-body); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+.leaflet-popup-content { margin: 10px 12px; }
+.leaflet-popup-content img { width: 220px; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 6px; }
+.leaflet-popup-content a { color: var(--ink); font-weight: 600; }
+
+/* Fiches */
+.list { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-height: calc(clamp(380px, 72vh, 720px) + 40px); overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+@media (max-width: 860px) { .list { max-height: none; overflow: visible; padding-right: 0; } }
+
+/* Bouton carte / mode sans carte : fiches sur toute la largeur, 4 colonnes */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
+.toggle { font: 600 0.875rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+.toggle:hover { border-color: var(--muted); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.filters button { font: 600 0.8rem var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.filters button[aria-pressed="true"] { color: var(--surface); background: var(--ink); border-color: var(--ink); }
+.src { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.main.sans-carte { grid-template-columns: minmax(0, 1fr); }
+.main.sans-carte .map-box { display: none; }
+.main.sans-carte .list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
+  max-height: none; overflow: visible; padding-right: 0; align-items: start; }
+@media (max-width: 1100px) { .main.sans-carte .list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .main.sans-carte .list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .main.sans-carte .list { grid-template-columns: minmax(0, 1fr); } }
+.main.sans-carte .photo { aspect-ratio: 4 / 3; }
+.main.sans-carte .card { cursor: default; }
+.card { flex-shrink: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; cursor: pointer; transition: border-color .15s, box-shadow .15s, opacity .15s; }
+.card:hover { border-color: var(--muted); }
+.card.sel { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.card.hors { opacity: .55; }
+.photo { aspect-ratio: 16 / 7; background: var(--land); }
+.photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.body { padding: 10px 12px; display: grid; gap: 4px; }
+.card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.price { font: 800 1.3rem/1 var(--font-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.price small { font: 500 0.8rem var(--font-body); color: var(--muted); margin-left: 4px; }
+.chip { font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.over { background: var(--over-soft); color: var(--over); }
+.city { font-weight: 600; font-size: 0.95rem; margin: 0; }
+.city span { color: var(--muted); font-weight: 400; }
+.facts { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.split { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { font-size: 0.8rem; color: var(--over); }
+.card a { color: var(--ink); font-weight: 600; font-size: 0.875rem; text-underline-offset: 3px; justify-self: start; }
+.empty { padding: 24px; background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+footer { color: var(--muted); font-size: 0.8rem; max-width: 80ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Radar T3</h1>
+      <p class="sub">Appartements __PIECES__ pièces en location chez <span id="bailleurs"></span> à Paris (75), dans les Hauts-de-Seine (92) et les Yvelines (78). Relevé du __DATE__.</p>
+    </div>
+    <div class="budget">
+      <label for="budget">Budget maximum, charges comprises</label>
+      <div class="budget-row">
+        <input type="range" id="budget" min="800" max="__BUDGET__" step="10" value="__BUDGET__">
+        <output id="budget-out" for="budget"></output>
+      </div>
+    </div>
+  </header>
+  <div class="toolbar">
+    <p class="summary" id="summary"></p>
+    <div class="filters" id="filters" role="group" aria-label="Filtrer par site"></div>
+    <button type="button" id="toggle-map" class="toggle" aria-pressed="true">Masquer la carte</button>
+  </div>
+  <div class="main" id="main">
+    <section class="map-box" aria-label="Carte des annonces">
+      <div id="map"></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--ok)"></i>Dans le budget</span>
+        <span><i class="sw" style="background:var(--over)"></i>Au-dessus du budget choisi</span>
+      </div>
+    </section>
+    <section class="list" id="list" aria-label="Annonces"></section>
+  </div>
+  <footer>
+    Loyers affichés par chaque bailleur, charges comprises ; certains incluent une place de stationnement, détaillée sur chaque fiche.
+    La page contient les T__PIECES__ relevés jusqu'à __BUDGET__ € par le script. Fond de carte © Esri et contributeurs OpenStreetMap.
+  </footer>
+</div>
+
+<script>
+const ANNONCES = __DATA__;
+const fmt = n => n == null ? "" : Math.round(n).toLocaleString("fr-FR") + " €";
+const fmt1 = n => n == null ? "" : n.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Fond Esri sans clé d'API, qui fonctionne aussi depuis un fichier local
+// (OpenStreetMap bloque les pages sans référent, CARTO exige une clé)
+const sombre = matchMedia("(prefers-color-scheme: dark)").matches;
+const map = L.map("map", { zoomControl: true }).setView([48.85, 2.15], 11);
+const esri = nom => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${nom}/MapServer/tile/{z}/{y}/{x}`;
+const fond = sombre ? "World_Dark_Gray" : "World_Light_Gray";
+L.tileLayer(esri(fond + "_Base"), { maxZoom: 16,
+  attribution: "Fond de carte &copy; Esri, HERE, Garmin, &copy; contributeurs OpenStreetMap" }).addTo(map);
+L.tileLayer(esri(fond + "_Reference"), { maxZoom: 16 }).addTo(map);
+
+// Une épingle par adresse (deux annonces peuvent partager la même)
+const groupes = new Map();
+ANNONCES.forEach((a, i) => {
+  if (a.latitude == null) return;
+  const k = a.latitude.toFixed(4) + "," + a.longitude.toFixed(4);
+  if (!groupes.has(k)) groupes.set(k, []);
+  groupes.get(k).push(i);
+});
+const markers = [];
+for (const items of groupes.values()) {
+  const a = ANNONCES[items[0]];
+  const m = L.marker([a.latitude, a.longitude], { keyboard: true, title: items.map(i => ANNONCES[i].ville + " " + fmt(ANNONCES[i].loyer)).join(" ; ") }).addTo(map);
+  m.items = items;
+  m.on("click", () => select((m.vis || items)[0], "map"));
+  markers.push(m);
+}
+if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3), { maxZoom: 15 });
+
+let budget = +document.getElementById("budget").value, selection = null, filtre = null;
+const SITES = [...new Set(ANNONCES.map(a => a.source).filter(Boolean))];
+const visible = i => !filtre || ANNONCES[i].source === filtre;
+const domaine = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return "le site"; } };
+document.getElementById("bailleurs").textContent = SITES.length ? SITES.join(" et ") : "les bailleurs suivis";
+const filters = document.getElementById("filters");
+function drawFilters() {
+  if (SITES.length < 2) { filters.hidden = true; return; }
+  const btn = (val, label, n) => `<button type="button" data-src="${esc(val ?? "")}" aria-pressed="${filtre === val}">${esc(label)} (${n})</button>`;
+  filters.innerHTML = btn(null, "Tous", ANNONCES.length) +
+    SITES.map(s => btn(s, s, ANNONCES.filter(a => a.source === s).length)).join("");
+}
+filters.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  filtre = b.dataset.src || null;
+  if (selection != null && !visible(selection)) selection = null;
+  drawFilters(); draw();
+});
+const list = document.getElementById("list");
+
+function popup(i) {
+  const a = ANNONCES[i];
+  return (a.photo ? `<img src="${esc(a.photo)}" alt="">` : "") +
+    `<span class="src">${esc(a.source)}</span><br><b>${esc(a.ville)} (${esc(a.code_postal)})</b><br>${fmt(a.loyer)} CC · ${a.pieces} pièces · ${fmt1(a.surface_m2)} m²<br>` +
+    (a.position && a.position !== "exacte" ? "<i>Position approximative (centre de la commune)</i><br>" : "") +
+    `<a href="${esc(a.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
+}
+
+function draw() {
+  document.getElementById("budget-out").textContent = fmt(budget);
+  const vis = ANNONCES.filter((a, i) => visible(i));
+  const ok = vis.filter(a => a.loyer <= budget).length, over = vis.length - ok;
+  document.getElementById("summary").innerHTML = ANNONCES.length
+    ? `<b>${ok} annonce${ok > 1 ? "s" : ""}</b> dans le budget de ${fmt(budget)}` + (over ? `, ${over} au-dessus.` : ".")
+    : "";
+  if (!ANNONCES.length) { list.innerHTML = `<div class="empty">Aucun T3 ne correspond aux critères lors du dernier passage du script.</div>`; return; }
+  list.innerHTML = ANNONCES.map((a, i) => {
+    if (!visible(i)) return "";
+    const s = a.loyer <= budget ? "ok" : "over";
+    const split = a.loyer_hc != null ? `${fmt(a.loyer_hc)} hors charges + ${fmt(a.charges)} de charges` + (a.stationnement ? ` + ${fmt(a.stationnement)} de stationnement` : "") : "";
+    return `<article class="card${s === "over" ? " hors" : ""}${selection === i ? " sel" : ""}" data-i="${i}" tabindex="0">
+      ${a.photo ? `<div class="photo"><img src="${esc(a.photo)}" alt="Photo de l'annonce à ${esc(a.ville)}" loading="lazy"></div>` : ""}
+      <div class="body">
+        <div class="card-top"><span class="price">${fmt(a.loyer)}<small>CC / mois</small></span>
+          <span class="chip ${s}">${s === "ok" ? "Dans le budget" : "+ " + fmt(a.loyer - budget) + " au-dessus"}</span></div>
+        <span class="src">${esc(a.source)}</span>
+        <p class="city">${esc(a.ville)} <span>${esc(a.code_postal)}</span></p>
+        <div class="facts"><span>${a.pieces} pièces</span><span>${fmt1(a.surface_m2)} m²</span><span>${fmt1(a.loyer / a.surface_m2)} €/m² CC</span><span>Réf. ${esc(a.id)}</span></div>
+        ${split ? `<div class="split">${split}</div>` : ""}
+        ${a.stationnement ? `<div class="split">Sans le stationnement : ${fmt(a.loyer - a.stationnement)}</div>` : ""}
+        ${a.position && a.position !== "exacte" ? `<div class="note">Position approximative : centre de la commune.</div>` : ""}
+        <a href="${esc(a.url)}" target="_blank" rel="noopener">Voir l'annonce sur ${esc(domaine(a.url))} ↗</a>
+      </div>
+    </article>`;
+  }).join("");
+  for (const m of markers) {
+    m.vis = m.items.filter(visible);
+    if (!m.vis.length) { map.removeLayer(m); continue; }
+    if (!map.hasLayer(m)) m.addTo(map);
+    const best = Math.min(...m.vis.map(i => ANNONCES[i].loyer));
+    const s = best <= budget ? "ok" : "over";
+    const label = fmt(best) + (m.vis.length > 1 ? ` ×${m.vis.length}` : "");
+    m.setIcon(L.divIcon({ className: "pin-icon", iconSize: [0, 0], html: `<div class="pin ${s}${m.items.includes(selection) ? " sel" : ""}">${label}</div>` }));
+    m.setZIndexOffset(s === "ok" ? 500 : 0);
+  }
+}
+
+function select(i, source) {
+  selection = i; draw();
+  const a = ANNONCES[i];
+  const m = markers.find(m => m.items.includes(i));
+  if (m && !main.classList.contains("sans-carte")) {
+    if (source !== "map") map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), { duration: 0.6 });
+    m.unbindPopup().bindPopup((m.vis || m.items).map(popup).join("<hr>"), { maxWidth: 260 }).openPopup();
+  }
+  if (source === "map") list.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+list.addEventListener("click", e => { if (e.target.closest("a")) return; const c = e.target.closest(".card"); if (c) select(+c.dataset.i, "list"); });
+list.addEventListener("keydown", e => { const c = e.target.closest(".card"); if (c && e.target === c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(+c.dataset.i, "list"); } });
+document.getElementById("budget").addEventListener("input", e => { budget = +e.target.value; draw(); });
+
+// Afficher / masquer la carte (choix mémorisé dans ce navigateur)
+const main = document.getElementById("main"), toggle = document.getElementById("toggle-map");
+function setCarte(visible) {
+  main.classList.toggle("sans-carte", !visible);
+  toggle.textContent = visible ? "Masquer la carte" : "Afficher la carte";
+  toggle.setAttribute("aria-pressed", String(visible));
+  try { localStorage.setItem("radar-carte", visible ? "1" : "0"); } catch (e) {}
+  if (visible) setTimeout(() => map.invalidateSize(), 0);
+}
+toggle.addEventListener("click", () => setCarte(main.classList.contains("sans-carte")));
+let carteVisible = true;
+try { carteVisible = localStorage.getItem("radar-carte") !== "0"; } catch (e) {}
+setCarte(carteVisible);
+drawFilters();
+draw();
+</script>
+</body>
+</html>

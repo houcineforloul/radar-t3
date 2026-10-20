@@ -1,0 +1,55 @@
+name: Actualiser les annonces
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # toutes les 30 min (GitHub peut retarder de quelques minutes)
+  workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  scraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Europe/Paris          # date du relevé à l'heure française
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Si tous les sites échouent, le script s'arrête en erreur : la page déjà en ligne est conservée.
+      - run: python scraper.py
+
+      - name: Préparer le site
+        run: |
+          mkdir site
+          cp annonces.html site/index.html
+          cp annonces.csv site/annonces.csv
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publier:
+    needs: scraper
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v4
