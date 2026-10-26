@@ -126,7 +126,7 @@ input[type=range] { accent-color: var(--ok); width: 220px; max-width: 50vw; }
   </header>
   <div class="toolbar">
     <p class="summary" id="summary"></p>
-    <div class="filters" id="filters" role="group" aria-label="Filtrer par site"></div>
+    <div class="filters" id="filters" role="group" aria-label="Filtrer les annonces"></div>
     <button type="button" id="toggle-map" class="toggle" aria-pressed="true">Masquer la carte</button>
   </div>
   <div class="main" id="main">
@@ -177,15 +177,17 @@ if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3), 
 
 let budget = +document.getElementById("budget").value, selection = null, filtre = null;
 const SITES = [...new Set(ANNONCES.map(a => a.source).filter(Boolean))];
-const visible = i => !filtre || ANNONCES[i].source === filtre;
+const NEW = "__new__", NB_NEW = ANNONCES.filter(a => a.nouveau).length;
+const visible = i => !filtre || (filtre === NEW ? ANNONCES[i].nouveau : ANNONCES[i].source === filtre);
 const domaine = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return "le site"; } };
 document.getElementById("bailleurs").textContent = SITES.length ? SITES.join(" et ") : "les bailleurs suivis";
 const filters = document.getElementById("filters");
 function drawFilters() {
-  if (SITES.length < 2) { filters.hidden = true; return; }
+  if (SITES.length < 2 && !NB_NEW) { filters.hidden = true; return; }
   const btn = (val, label, n) => `<button type="button" data-src="${esc(val ?? "")}" aria-pressed="${filtre === val}">${esc(label)} (${n})</button>`;
   filters.innerHTML = btn(null, "Tous", ANNONCES.length) +
-    SITES.map(s => btn(s, s, ANNONCES.filter(a => a.source === s).length)).join("");
+    (SITES.length > 1 ? SITES.map(s => btn(s, s, ANNONCES.filter(a => a.source === s).length)).join("") : "") +
+    (NB_NEW ? btn(NEW, "NEW", NB_NEW) : "");
 }
 filters.addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
