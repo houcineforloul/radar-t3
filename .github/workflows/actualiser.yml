@@ -2,7 +2,7 @@ name: Actualiser les annonces
 
 on:
   schedule:
-    - cron: "3,13,23,33,43,53 * * * *"   # toutes les 10 min, hors des minutes rondes surchargées chez GitHub
+    - cron: "7 */6 * * *"   # toutes les 6 h (00:07, 06:07, 12:07, 18:07 UTC), hors des minutes rondes surchargées chez GitHub
   workflow_dispatch:          # bouton « Run workflow » pour lancer à la main
 
 permissions:
@@ -30,6 +30,9 @@ jobs:
           cache: pip
 
       - run: pip install -r requirements.txt
+
+      # Relevé précédent (publié sur Pages) : sert à repérer les nouvelles annonces. Absent = pas de « NEW ».
+      - run: curl -fsSL "https://houcineforloul.github.io/radar-t3/annonces.csv" -o annonces.csv || rm -f annonces.csv
 
       # Si tous les sites échouent, le script s'arrête en erreur : la page déjà en ligne est conservée.
       - run: python scraper.py

@@ -13,14 +13,14 @@
 /* Carte à gauche, fiches d'annonces à droite ; empilé sur téléphone. */
 :root {
   --bg: #f2f5f4; --surface: #ffffff; --ink: #16211e; --muted: #5a6964; --line: #cdd6d2; --land: #e3e9e6;
-  --ok: #0d6b57; --ok-soft: #d7ece5; --over: #8f5a00; --over-soft: #f4e6cc; --focus: #1f5fd1;
+  --ok: #0d6b57; --ok-soft: #d7ece5; --over: #8f5a00; --over-soft: #f4e6cc; --focus: #1f5fd1; --new: #d0202e;
   --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
   --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root {
   --bg: #0f1514; --surface: #161e1c; --ink: #e2eae7; --muted: #94a39e; --line: #2c3935; --land: #1a2321;
-  --ok: #5cc9a8; --ok-soft: #173a31; --over: #e3a64a; --over-soft: #3b2c12; --focus: #7aa7ff; color-scheme: dark } }
+  --ok: #5cc9a8; --ok-soft: #173a31; --over: #e3a64a; --over-soft: #3b2c12; --focus: #7aa7ff; --new: #e5383b; color-scheme: dark } }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
@@ -95,6 +95,9 @@ input[type=range] { accent-color: var(--ok); width: 220px; max-width: 50vw; }
 .chip { font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); }
 .chip.over { background: var(--over-soft); color: var(--over); }
+.new { display: inline-block; background: var(--new); color: #fff; font: 800 0.7rem/1 var(--font-body); letter-spacing: 0.08em;
+  padding: 3px 7px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+.card.nouveau { border-color: var(--new); }
 .city { font-weight: 600; font-size: 0.95rem; margin: 0; }
 .city span { color: var(--muted); font-weight: 400; }
 .facts { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
@@ -195,7 +198,7 @@ const list = document.getElementById("list");
 function popup(i) {
   const a = ANNONCES[i];
   return (a.photo ? `<img src="${esc(a.photo)}" alt="">` : "") +
-    `<span class="src">${esc(a.source)}</span><br><b>${esc(a.ville)} (${esc(a.code_postal)})</b><br>${fmt(a.loyer)} CC · ${a.pieces} pièces · ${fmt1(a.surface_m2)} m²<br>` +
+    (a.nouveau ? `<span class="new">NEW</span>` : "") + `<span class="src">${esc(a.source)}</span><br><b>${esc(a.ville)} (${esc(a.code_postal)})</b><br>${fmt(a.loyer)} CC · ${a.pieces} pièces · ${fmt1(a.surface_m2)} m²<br>` +
     (a.position && a.position !== "exacte" ? "<i>Position approximative (centre de la commune)</i><br>" : "") +
     `<a href="${esc(a.url)}" target="_blank" rel="noopener">Voir l'annonce ↗</a>`;
 }
@@ -212,12 +215,12 @@ function draw() {
     if (!visible(i)) return "";
     const s = a.loyer <= budget ? "ok" : "over";
     const split = a.loyer_hc != null ? `${fmt(a.loyer_hc)} hors charges + ${fmt(a.charges)} de charges` + (a.stationnement ? ` + ${fmt(a.stationnement)} de stationnement` : "") : "";
-    return `<article class="card${s === "over" ? " hors" : ""}${selection === i ? " sel" : ""}" data-i="${i}" tabindex="0">
+    return `<article class="card${s === "over" ? " hors" : ""}${a.nouveau ? " nouveau" : ""}${selection === i ? " sel" : ""}" data-i="${i}" tabindex="0">
       ${a.photo ? `<div class="photo"><img src="${esc(a.photo)}" alt="Photo de l'annonce à ${esc(a.ville)}" loading="lazy"></div>` : ""}
       <div class="body">
         <div class="card-top"><span class="price">${fmt(a.loyer)}<small>CC / mois</small></span>
           <span class="chip ${s}">${s === "ok" ? "Dans le budget" : "+ " + fmt(a.loyer - budget) + " au-dessus"}</span></div>
-        <span class="src">${esc(a.source)}</span>
+        <span>${a.nouveau ? `<span class="new" title="Vue pour la première fois le ${esc(a.vu_le.replace("T", " à "))}">NEW</span>` : ""}<span class="src">${esc(a.source)}</span></span>
         <p class="city">${esc(a.ville)} <span>${esc(a.code_postal)}</span></p>
         <div class="facts"><span>${a.pieces} pièces</span><span>${fmt1(a.surface_m2)} m²</span><span>${fmt1(a.loyer / a.surface_m2)} €/m² CC</span><span>Réf. ${esc(a.id)}</span></div>
         ${split ? `<div class="split">${split}</div>` : ""}

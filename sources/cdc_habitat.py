@@ -9,7 +9,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from .commun import AccesBloque, get_reponse, get, gps_depuis_page, montant
+from .commun import AccesBloque, get_reponse, get, gps_depuis_page, montant, session
 
 NOM = "CDC Habitat"
 BASE = "https://www.cdc-habitat.fr"
@@ -65,6 +65,7 @@ def parse_carte(carte):
 def scrape_departement(dep, url_depart, deja_vus):
     annonces, url, page, total = [], url_depart, 1, 0
     while url:
+        session.cookies.clear()  # le cookie portailCommercial retient la dernière page vue
         r = get_reponse(url)
         if page > 1 and not re.search(r"/page-(\d+)", r.url):
             break  # redirigé vers la page 1 : plus de page

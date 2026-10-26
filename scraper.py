@@ -5,6 +5,7 @@ Chaque site est un module de sources/ ; ce fichier les lance, filtre, dédoublon
 
 import os
 import time
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -16,8 +17,34 @@ PIECES = 3
 BUDGET_MAX = 1300
 CSV = "annonces.csv"
 CARTE = "annonces.html"
+DUREE_NOUVEAU = timedelta(hours=24)  # une annonce reste marquée « NEW » 24 h après sa première détection
 COLONNES = ["source", "id", "ville", "code_postal", "loyer", "charges_comprises", "loyer_hc",
-            "charges", "stationnement", "pieces", "surface_m2", "latitude", "longitude", "position", "photo", "url"]
+            "charges", "stationnement", "pieces", "surface_m2", "latitude", "longitude", "position", "photo", "url",
+            "vu_le", "nouveau"]
+
+
+def dates_precedentes():
+    """(source, id) -> date de première détection, lues dans le CSV du relevé précédent ;
+    None s'il n'y a pas de relevé précédent (premier passage : aucune annonce marquée « NEW »)."""
+    if not os.path.exists(CSV):
+        return None
+    try:
+        df = pd.read_csv(CSV, sep=";", encoding="utf-8-sig", dtype=str)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError):
+        return None
+    vu_le = df["vu_le"] if "vu_le" in df else pd.Series("", index=df.index)
+    return {(s, i): (v if isinstance(v, str) else "") for s, i, v in zip(df["source"], df["id"], vu_le)}
+
+
+def marquer_nouveautes(resultats, precedentes):
+    """Date de première détection et indicateur « nouveau » (vue depuis moins de DUREE_NOUVEAU)."""
+    maintenant = datetime.now()
+    for a in resultats:
+        if precedentes is None:
+            a["vu_le"] = ""  # date inconnue : on ne sait pas si l'annonce est récente
+        else:
+            a["vu_le"] = precedentes.get((a["source"], str(a["id"])), maintenant.isoformat(timespec="minutes"))
+        a["nouveau"] = bool(a["vu_le"]) and maintenant - datetime.fromisoformat(a["vu_le"]) < DUREE_NOUVEAU
 
 
 def ecrire_carte(df):
@@ -44,6 +71,7 @@ def exporter(resultats):
 
 
 def main():
+    precedentes = dates_precedentes()
     toutes, erreurs = {}, []
     for source in SOURCES:
         try:
@@ -75,10 +103,12 @@ def main():
     for a in resultats:
         modules[a["source"]].enrichir(a)
 
+    marquer_nouveautes(resultats, precedentes)
     df = exporter(resultats)
     with pd.option_context("display.max_columns", None, "display.width", 250, "display.max_colwidth", 60):
         print(df.drop(columns=["photo"]).to_string(index=False))
-    print(f"\n{len(df)} annonce(s) exportée(s) dans {CSV} et {CARTE} (ouvrez-le dans votre navigateur)")
+    print(f"\n{len(df)} annonce(s) exportée(s) dans {CSV} et {CARTE} (ouvrez-le dans votre navigateur), "
+          f"dont {int(df['nouveau'].sum())} nouvelle(s)")
     if erreurs:
         print("Attention, sites en échec : " + " ; ".join(erreurs))
 
